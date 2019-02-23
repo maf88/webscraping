@@ -10,7 +10,7 @@
 # *******                                                               *******#
 
 """
-A big module to download and save. 
+A big module to download and save lectures on some kajabi websites. 
 """
 
 import re
@@ -23,6 +23,8 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.remote.remote_connection import LOGGER
 
+# Types
+from typing import List
 
 # Containers
 from course import Course as Course
@@ -40,27 +42,40 @@ logging.captureWarnings(True)
 # Selenium
 LOGGER.setLevel(logging.INFO)
 
-# Load User Personal Data
-with open("user.info", "r") as user_info:
-    line = user_info.readline()
-    # Assign user info variables
-    USERNAME, PASSWORD, MAIN_URL = line.split(" ")
+#
+#   Class SECTION
+#
 
-LOGIN_URL = MAIN_URL + "/login"
-URL = MAIN_URL + "/library"
+
+class UserPersonalData:
+    """ 
+    Website and login info for scraping.
+    A `user.info` file shoud be present in the current directory.
+    """
+
+    def __init__(self):
+        if not os.path.exists("./user.info"):
+            raise FileNotFoundError("`user.info` was not found.")
+        with open("user.info", "r") as user_info:
+            line = user_info.readline()
+            # Assign user info variables
+            self.USERNAME, self.PASSWORD, self.MAIN_URL = line.split(" ")
+
+        self.LOGIN_URL = self.MAIN_URL + "/login"
+        self.URL = self.MAIN_URL + "/library"
+
+    def goto_and_sign_into_website_from(self, webdriver: webdriver) -> None:
+        """ Log in a website and update the given webdriver"""
+        webdriver.get(self.LOGIN_URL)
+        webdriver.find_element_by_id("member_email").send_keys(self.USERNAME)
+        webdriver.find_element_by_id("member_password").send_keys(self.PASSWORD)
+        webdriver.find_element_by_name("commit").click()
+        # return self._wdriver
+
 
 #
 #   FUNCTION SECTION
 #
-
-
-def goto_and_sign_into_website_from(webdriver):
-    """ Log in a website through a Selenium webdriver"""
-    webdriver.get(LOGIN_URL)
-    webdriver.find_element_by_id("member_email").send_keys(USERNAME)
-    webdriver.find_element_by_id("member_password").send_keys(PASSWORD)
-    webdriver.find_element_by_name("commit").click()
-    return webdriver
 
 
 def find_the_next_page_element(wdriver, class_ref):
@@ -77,28 +92,60 @@ def find_the_next_page_element(wdriver, class_ref):
     return next_page_element
 
 
-def fetch_lectures_in_current_page(wdriver):
+#
+# Getting attributes for a web element
+def get_course_attributes(
+    course_web_element: "A selenium WebElement object"
+) -> (str, str, str):
     """
-    Find all lectures in a page of a chapter
+    """
+    we = course_web_element
+    title = we.find_element_by_class_name("title").text
+    link_id = we.get_attribute("id")
+    url = we.find_element_by_tag_name("a").get_attribute("href")
+    return (title, link_id, url)
+
+def get_chapter_attributes(
+    chapter_web_element: "A selenium WebElement object"
+) -> (str, str, str):
+    """
+    """
+    we = chapter_web_element
+    title = we.find_element_by_class_name("title").text
+    link_id = we.get_attribute("id")
+    url = we.get_attribute("href")
+    return (title, link_id, url)
+
+def get_lecture_attributes(
+    lecture_web_element: "A selenium WebElement object"
+) -> (str, str, str):
+    """
+    """
+    we = lecture_web_element
+    title = we.find_element_by_xpath(".//h4").text
+    link_id = we.get_attribute("id")
+    url = we.get_attribute("href")
+    return (title, link_id, url)
+
+#
+# Helpers for downloading lectures
+def fetch_lectures_in_current_page(wdriver) -> List[Lecture]:
+    """
+    Find all lectures in a page of a chapter. 
     """
     lectures = []
-    ref = Lecture.referencer
-    page_lectures_element = wdriver.find_elements_by_xpath(
-        "//a[starts-with(@id, '" + ref + "-')]"
-    )
+    page_lectures_element = Lecture.fetch_all_referencer_elements(wdriver)
     if len(page_lectures_element) == 0:
-        raise Exception("This page shouldn't be loaded because it has no videos.")
+        raise Exception("This page shouldn't be scraped because it has no videos.")
     else:
-        for lecture in page_lectures_element:
-            title = lecture.find_element_by_xpath(".//h4").text
-            link_id = lecture.get_attribute("id")
-            url = lecture.get_attribute("href")
+        for element in page_lectures_element:
+            title, link_id, url = get_lecture_attributes(element)
             new_lecture = Lecture(title, link_id, url)
             lectures.append(new_lecture)
     return lectures
 
 
-def fetch_all_lectures_data(wdriver, chapter):
+def fetch_all_lectures_data(wdriver, chapter) -> None:
     """
     For a given chapter fetch all lectures information:
     title, link id, url and download url.
@@ -146,14 +193,29 @@ def fetch_all_lectures_data(wdriver, chapter):
         raise FileNotFoundError("There were no lectures in this chapter.")
 
 
+def create_formated_path(titles: (str, str, str, int)) -> str:
+    rootdir = "./BJJ/"
+    ext = ".m4v"  # TODO: extract dynamically the extension
+    path = titles[0] + "/" + titles[1]
+    # Replace all the " " and unwanted character for "_"
+    path = re.sub(r"[^\w\d\/\:\.-]", "_", path)
+    filename = "%0*d" % (3, titles[3]) + "_" + re.sub(r"[^\w\d-]", "_", titles[2])
+    return rootdir + path + "/" + filename + ext
+
+
 #
 #   MAIN SECTION
 #
 
 if __name__ == "__main__":
-    print("Starting program.")
+
+    def print_next_on_same_line(msg: str):
+        print(msg, end=" ", flush=True)
+
+    print("Starting program...")
     wdriver = webdriver.Firefox()
-    goto_and_sign_into_website_from(wdriver)
+    user_info = UserPersonalData()
+    user_info.goto_and_sign_into_website_from(wdriver)
 
     # Check if we are on a good page
     try:
@@ -165,23 +227,18 @@ if __name__ == "__main__":
     print("Successfully signed in.")
 
     # Find all available courses
-    print("Retrieving all courses...", end=" ")
-    ref = Course.referencer
-    courses_element = wdriver.find_elements_by_xpath(
-        "//div[starts-with(@id, '" + ref + "-')]"
-    )
+    print_next_on_same_line("Retrieving all courses...")
+    courses_element = Course.fetch_all_referencer_elements(wdriver)
+
     courses = []
-    for ce in courses_element:
-        title = ce.find_element_by_class_name("title").text
-        # Getting the course unique id and adding it to the course
-        link_id = ce.get_attribute("id")
-        url = ce.find_element_by_tag_name("a").get_attribute("href")
+    for element in courses_element:
+        title, link_id, url = get_course_attributes(element)
 
         new_course = Course(title, link_id, url)
         courses.append(new_course)
 
     # For a given course find all the chapter
-    print("... and all chapters...", end=" ")
+    print_next_on_same_line("... and all chapters...")
     for course in courses:  # DEBUG instead loop
         wdriver.get(course.url)
         try:
@@ -190,16 +247,11 @@ if __name__ == "__main__":
         except:
             logging.warning("We're on the wrong page")
             raise
-        ref = Chapter.referencer
-        chapters_element = wdriver.find_elements_by_xpath(
-            "//a[starts-with(@id, '" + ref + "-')]"
-        )
+        chapters_element = Chapter.fetch_all_referencer_elements(wdriver)
 
         chapters = []
-        for chapt in chapters_element:
-            title = chapt.find_element_by_class_name("title").text
-            link_id = chapt.get_attribute("id")
-            url = chapt.get_attribute("href")
+        for element in chapters_element:
+            title, link_id, url = get_chapter_attributes(element)
             new_chapter = Chapter(title, link_id, url)
             chapters.append(new_chapter)
         course.chapters = chapters
@@ -207,43 +259,39 @@ if __name__ == "__main__":
     logging.debug([{chapt.title: chapt.url} for chapt in courses[0].chapters])
     logging.debug([{chapt.title: chapt.url} for chapt in courses[1].chapters])
 
-    # Fetch all lectures
+    # Find and fetch all lectures
     # The id of the posts are not necessarilly regularely increased. We need
     # to extract them all individually
-    print("... and all lecturses.")
+    print_next_on_same_line("... and all lectures ...")
     try:
         [
-            [fetch_all_lectures_data(wdriver, chapter) for chapter in course.chapters]
+            [
+                fetch_all_lectures_data(wdriver, chapter) 
+                for chapter in course.chapters
+            ]
             for course in courses
         ]
     except Exception:
         raise
+    print("Done.")
     wdriver.quit()
     print("Exiting website.")
 
     # Create folder structure for all courses and chapters
-    print("Creating folder structure if necessary.", end="\t")
+    print_next_on_same_line("Creating folder structure if necessary...")
     paths = []
     for course in courses:
-        course_name = course.title
         for chapter in course.chapters:
-            chapter_name = chapter.title
             for i, lecture in enumerate(chapter.lectures):
-                path = course_name + "/" + chapter_name
-                # Replace all the " " and unwanted character for "_"
-                path = re.sub(r"[^\w\d\/\:\.-]", "_", path)
-                filename = (
-                    "%0*d" % (3, i) + "_" + re.sub(r"[^\w\d-]", "_", lecture.title)
+                path = create_formated_path(
+                    (course.title, chapter.title, lecture.title, i)
                 )
-                path = (
-                    "./BJJ/" + path + "/" + filename + ".m4v"
-                )  # TODO: extract dynamically the extension
                 paths.append(path)
     logging.debug(str(paths))
     print("Done.")
 
     # Download all videos
-    print("Downloading all videos", end="\t")
+    print_next_on_same_line("Downloading all videos")
     path_it = iter(paths)
     for course in courses:
         for chapter in course.chapters:
@@ -268,4 +316,4 @@ if __name__ == "__main__":
                     raise
     print("Done.")
 
-print("Program finished. Done!. Exiting.")
+print("Program finished. Exiting!")

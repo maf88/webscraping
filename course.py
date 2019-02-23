@@ -16,7 +16,7 @@ The objects are:
     + Chapters
     + Lectures
 A course contains chapters, and a chapter contains lectures.
-All those classes are derived by the abstract class ReferenceContainer.
+All those classes are derived by the abstract class ReferencerContainer.
 """
 
 import re
@@ -25,43 +25,54 @@ import logging
 
 # Web
 import urllib3
+from selenium import webdriver
 
 
-class ReferenceContainer:
+class ReferencerContainer:
     referencer: str = ""
+    xpath: str = ""
 
     def __init__(self, title: str, link_id: str, url: str) -> None:
         self.title: str = title
         self.web_id: str = link_id
         self.url: str = url
 
+    @classmethod
+    def fetch_all_referencer_elements(cls, wdriver: webdriver) -> list:
+        """
+        """
+        return wdriver.find_elements_by_xpath(cls.xpath)
 
-class Course(ReferenceContainer):
+
+class Course(ReferencerContainer):
     """ Data structure to get the URL for different courses. """
 
-    referencer: str = "product"
+    referencer = "product"
+    xpath = "//div[starts-with(@id, '" + referencer + "-')]"
 
     def __init__(self, title: str, link_id: str, url: str):
         super().__init__(title, link_id, url)
         self.chapters: Chapter = []
 
 
-class Chapter(ReferenceContainer):
+class Chapter(ReferencerContainer):
     """ Data structure to store informations about a course's chapter"""
 
-    referencer: str = "category"
+    referencer = "category"
+    xpath = "//a[starts-with(@id, '" + referencer + "-')]"
 
     def __init__(self, title: str, link_id: str, url: str):
         super().__init__(title, link_id, url)
         self.lectures: Lecture = []
 
 
-class Lecture(ReferenceContainer):
+class Lecture(ReferencerContainer):
     """ Data structure to store info about the lectures in a chapter.
         They reprensent the video to be downloaded. It's the atomic level
     """
 
     referencer: str = "post"
+    xpath = "//a[starts-with(@id, '" + referencer + "-')]"
 
     def __init__(self, title: str, link_id: str, url: str):
         super().__init__(title, link_id, url)
@@ -83,19 +94,18 @@ class Lecture(ReferenceContainer):
                 logging.warning(msg)
                 raise FileNotFoundError(msg)
 
-            r = http.request("GET", self._url_to_download)
-            if r.status == 200:
-                dst = os.path.join(destination_path, filename)
-                if overwrite or (not os.path.exists(dst)):
+            dst = os.path.join(destination_path, filename)
+            if overwrite or (not os.path.exists(dst)):
+                r = http.request("GET", self._url_to_download)
+                if r.status == 200:
                     with open(dst, "wb") as video:
                         video.write(r.data)
                 else:
-                    raise FileExistsError("File exists already")
-
+                    raise ConnectionError(
+                        "Unbale to connect to the website to download the lecture"
+                    )
             else:
-                raise ConnectionError(
-                    "Unbale to connect to the website to download the lecture"
-                )
+                logging.warning("File '" + str(filename) + "' exists already.")
 
 
 if __name__ == "__main__":
@@ -105,7 +115,7 @@ if __name__ == "__main__":
     class TestCourseClasses(unittest.TestCase):
         def get_dummy_variables(self) -> (str, str, str):
             """
-            Return dummy variables to pass to a ReferenceContainer object's
+            Return dummy variables to pass to a ReferencerContainer object's
             constructor
             """
             title = "Title"
@@ -119,29 +129,34 @@ if __name__ == "__main__":
             self.assertEqual(Lecture.referencer, "post")
 
         def test_objects_creation(self):
+            def _test_basic_attributes(object: ReferencerContainer) -> None:
+                self.assertEqual(object.title, title)
+                self.assertEqual(object.web_id, link_id)
+                self.assertEqual(object.url, url)
+
             # init test values
             title, link_id, url = self.get_dummy_variables()
 
             #
             # Course
             course = Course(title, link_id, url)
+            _test_basic_attributes(course)
+            """
             self.assertEqual(course.title, title)
             self.assertEqual(course.web_id, link_id)
             self.assertEqual(course.url, url)
+            """
 
             # Chapter
             course.chapters.append(Chapter(title, link_id, url))
             chapter = course.chapters[0]
-            self.assertEqual(chapter.title, title)
-            self.assertEqual(chapter.web_id, link_id)
-            self.assertEqual(chapter.url, url)
+            _test_basic_attributes(chapter)
+
 
             # Lecture
             chapter.lectures.append(Lecture(title, link_id, url))
             lecture = chapter.lectures[0]
-            self.assertEqual(lecture.title, title)
-            self.assertEqual(lecture.web_id, link_id)
-            self.assertEqual(lecture.url, url)
+            _test_basic_attributes(lecture)
             self.assertFalse(lecture.url_to_download)
 
         def test_download(self):
