@@ -141,11 +141,6 @@ if __name__ == "__main__":
             # Course
             course = Course(title, link_id, url)
             _test_basic_attributes(course)
-            """
-            self.assertEqual(course.title, title)
-            self.assertEqual(course.web_id, link_id)
-            self.assertEqual(course.url, url)
-            """
 
             # Chapter
             course.chapters.append(Chapter(title, link_id, url))
@@ -162,10 +157,10 @@ if __name__ == "__main__":
         def test_download(self):
             title, link_id, url = self.get_dummy_variables()
             lecture = Lecture(title, link_id, url)
-            # Test
+            # Test 1
             with self.assertRaises(FileNotFoundError):
                 lecture.download_lecture("/tmp/", ".tmp")
-            # Test
+            # Test 2
             lecture.url_to_download = (
                 "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4"
             )
