@@ -105,6 +105,7 @@ def get_course_attributes(
     url = we.find_element_by_tag_name("a").get_attribute("href")
     return (title, link_id, url)
 
+
 def get_chapter_attributes(
     chapter_web_element: "A selenium WebElement object"
 ) -> (str, str, str):
@@ -116,6 +117,7 @@ def get_chapter_attributes(
     url = we.get_attribute("href")
     return (title, link_id, url)
 
+
 def get_lecture_attributes(
     lecture_web_element: "A selenium WebElement object"
 ) -> (str, str, str):
@@ -126,6 +128,7 @@ def get_lecture_attributes(
     link_id = we.get_attribute("id")
     url = we.get_attribute("href")
     return (title, link_id, url)
+
 
 #
 # Helpers for downloading lectures
@@ -265,10 +268,7 @@ if __name__ == "__main__":
     print_next_on_same_line("... and all lectures ...")
     try:
         [
-            [
-                fetch_all_lectures_data(wdriver, chapter) 
-                for chapter in course.chapters
-            ]
+            [fetch_all_lectures_data(wdriver, chapter) for chapter in course.chapters]
             for course in courses
         ]
     except Exception:

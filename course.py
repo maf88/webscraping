@@ -147,7 +147,6 @@ if __name__ == "__main__":
             chapter = course.chapters[0]
             _test_basic_attributes(chapter)
 
-
             # Lecture
             chapter.lectures.append(Lecture(title, link_id, url))
             lecture = chapter.lectures[0]
